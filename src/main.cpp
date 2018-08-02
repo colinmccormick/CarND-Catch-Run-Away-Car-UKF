@@ -3,6 +3,7 @@
 #include "json.hpp"
 #include <math.h>
 #include "ukf.h"
+#include "Eigen/Dense"
 
 using namespace std;
 
@@ -61,11 +62,11 @@ int main()
           
           MeasurementPackage meas_package_L;
           istringstream iss_L(lidar_measurment);
-    	  long long timestamp_L;
+    	    long long timestamp_L;
 
-    	  // reads first element from the current line
-    	  string sensor_type_L;
-    	  iss_L >> sensor_type_L;
+    	    // reads first element from the current line
+    	    string sensor_type_L;
+    	    iss_L >> sensor_type_L;
 
       	  // read measurements at this timestamp
       	  meas_package_L.sensor_type_ = MeasurementPackage::LASER;
@@ -78,17 +79,17 @@ int main()
           iss_L >> timestamp_L;
           meas_package_L.timestamp_ = timestamp_L;
           
-    	  ukf.ProcessMeasurement(meas_package_L);
+    	    ukf.ProcessMeasurement(meas_package_L);
 		 
-    	  string radar_measurment = j[1]["radar_measurement"];
+    	    string radar_measurment = j[1]["radar_measurement"];
           
           MeasurementPackage meas_package_R;
           istringstream iss_R(radar_measurment);
-    	  long long timestamp_R;
+    	    long long timestamp_R;
 
-    	  // reads first element from the current line
-    	  string sensor_type_R;
-    	  iss_R >> sensor_type_R;
+    	    // reads first element from the current line
+    	    string sensor_type_R;
+    	    iss_R >> sensor_type_R;
 
       	  // read measurements at this timestamp
       	  meas_package_R.sensor_type_ = MeasurementPackage::RADAR;
@@ -103,21 +104,45 @@ int main()
           iss_R >> timestamp_R;
           meas_package_R.timestamp_ = timestamp_R;
           
-    	  ukf.ProcessMeasurement(meas_package_R);
+    	    ukf.ProcessMeasurement(meas_package_R);
 
-	  target_x = ukf.x_[0];
-	  target_y = ukf.x_[1];
+          // Guidance strategy for hunter car
 
-    	  double heading_to_target = atan2(target_y - hunter_y, target_x - hunter_x);
-    	  while (heading_to_target > M_PI) heading_to_target-=2.*M_PI; 
-    	  while (heading_to_target <-M_PI) heading_to_target+=2.*M_PI;
-    	  //turn towards the target
-    	  double heading_difference = heading_to_target - hunter_heading;
-    	  while (heading_difference > M_PI) heading_difference-=2.*M_PI; 
-    	  while (heading_difference <-M_PI) heading_difference+=2.*M_PI;
+          // Caculate direct time to intercept
+          double hunter_velocity = ukf.x_[2];   // Same as target car
+          double heading_to_target = atan2(target_y - hunter_y, target_x - hunter_x);
+          while (heading_to_target > M_PI) heading_to_target-=2.*M_PI; 
+          while (heading_to_target <-M_PI) heading_to_target+=2.*M_PI;
+          double direct_time = (target_x - hunter_x) / (hunter_velocity * cos(heading_to_target));
 
-    	  double distance_difference = sqrt((target_y - hunter_y)*(target_y - hunter_y) + (target_x - hunter_x)*(target_x - hunter_x));
+          // Predict target position at overshoot time 
+          // (save current ukf state and covariance values and restore after prediction)
+          VectorXd current_x = ukf.x_;
+          MatrixXd current_P = ukf.P_;
+          ukf.Prediction(direct_time * ukf.overshoot_);
+          target_x = ukf.x_[0];
+          target_y = ukf.x_[1];
+          ukf.x_ = current_x;
+          ukf.P_ = current_P;
 
+          // Calculate distance difference
+          double distance_difference = sqrt((target_x-hunter_x)*(target_x-hunter_x)+(target_y-hunter_y)*(target_y-hunter_y));
+
+          // Adjust overshoot factor for next loop
+          double time_delta_fraction = (direct_time * ukf.overshoot_ - distance_difference / hunter_velocity) / (direct_time * ukf.overshoot_);
+          ukf.overshoot_ *= (1.0 - time_delta_fraction/2);
+
+          // Establish new heading to overshoot position
+    	    heading_to_target = atan2(target_y - hunter_y, target_x - hunter_x);
+    	    while (heading_to_target > M_PI) heading_to_target-=2.*M_PI; 
+    	    while (heading_to_target <-M_PI) heading_to_target+=2.*M_PI;
+
+    	    // Aim towards the target at overshoot position
+    	    double heading_difference = heading_to_target - hunter_heading;
+    	    while (heading_difference > M_PI) heading_difference-=2.*M_PI; 
+    	    while (heading_difference <-M_PI) heading_difference+=2.*M_PI;
+
+          // Send message
           json msgJson;
           msgJson["turn"] = heading_difference;
           msgJson["dist"] = distance_difference; 
@@ -171,89 +196,6 @@ int main()
   }
   h.run();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

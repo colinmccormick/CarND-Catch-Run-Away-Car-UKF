@@ -67,6 +67,20 @@ public:
   ///* Sigma point spreading parameter
   double lambda_;
 
+  ///* Lidar noise matrix
+  MatrixXd R_laser_;
+
+  ///* Radar noise matrix
+  MatrixXd R_radar_;
+
+  ///* Process noise matrix
+  MatrixXd R_process_;
+
+  ///* Projection matrix for lidar
+  MatrixXd H_laser_;
+
+  ///* Overshoot factor
+  double overshoot_;
 
   /**
    * Constructor
